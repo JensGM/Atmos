@@ -1,4 +1,6 @@
 from .. import cli
+from atmos import get_dirs
+from atmos import UnlinkError
 from diskcache import Cache
 from pathlib import Path
 import pytest  # noqa: F401
@@ -33,7 +35,7 @@ def test_set(atmos_tmp):
 
 def test_get_dirs(atmos_tmp):
     with Cache(atmos_tmp['cache_path']) as cache:
-        atmos_root, dest_root = cli.get_dirs(cache)
+        atmos_root, dest_root = get_dirs(cache)
 
     ar = Path('atmos/tests/test_data/atmos_root').resolve()
     assert atmos_root == ar
@@ -59,19 +61,11 @@ def test_unlink(atmos_tmp):
     some_library_args = cli.parser.parse_args(['link', 'some_library'])
     another_library_args = cli.parser.parse_args(['link', 'another_library'])
     with Cache(atmos_tmp['cache_path']) as cache:
-        assert 'some_library' not in cache['linked']
-        assert 'another_library' not in cache['linked']
-
         some_library_args.func(some_library_args, cache)
         another_library_args.func(another_library_args, cache)
 
-        assert 'some_library' in cache['linked']
-        assert 'another_library' in cache['linked']
-
     file_a = Path(atmos_tmp['dest_root']) / 'somedir/msg.txt'
     file_b = Path(atmos_tmp['dest_root']) / 'lib/hello_world.py'
-    assert file_a.is_symlink()
-    assert file_b.is_symlink()
 
     args = cli.parser.parse_args(['unlink', 'some_library'])
     with Cache(atmos_tmp['cache_path']) as cache:
@@ -79,5 +73,44 @@ def test_unlink(atmos_tmp):
         assert 'some_library' not in cache['linked']
         assert 'another_library' in cache['linked']
 
+    assert not file_a.exists()
+    assert file_b.is_symlink()
+
+
+def test_unlink_full(atmos_tmp):
+    some_library_args = cli.parser.parse_args(['link', 'some_library'])
+    another_library_args = cli.parser.parse_args(['link', 'another_library'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        some_library_args.func(some_library_args, cache)
+        another_library_args.func(another_library_args, cache)
+
+    file_a = Path(atmos_tmp['dest_root']) / 'somedir/msg.txt'
+    file_b = Path(atmos_tmp['dest_root']) / 'lib/hello_world.py'
+
+    # Delete the entry from the cache, making the cache invalid
+    with Cache(atmos_tmp['cache_path']) as cache:
+        linked = cache['linked']
+        del linked['some_library']
+        cache['linked'] = linked
+
+    # Fails without full parameter
+    args = cli.parser.parse_args(['unlink', 'some_library'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        with pytest.raises(UnlinkError):
+            args.func(args, cache)
+        assert 'another_library' in cache['linked']
+
+    # All linked files should still exist
+    assert file_a.is_symlink()
+    assert file_b.is_symlink()
+
+    # Fails without full parameter
+    args = cli.parser.parse_args(['unlink', 'some_library', '--full'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        args.func(args, cache)
+        assert 'another_library' in cache['linked']
+
+    # file_a should be removed because it is from some_library, even if
+    # some_library was not present in the cache.
     assert not file_a.exists()
     assert file_b.is_symlink()
