@@ -27,12 +27,6 @@ def cmd_unlink(args, cache):
         if not link.is_symlink():
             logging.warning('{} is not a symlink'.format(link))
             continue
-        if not link.exists():
-            logging.warning('{} does not exist'.format(link))
-            continue
-        if link.is_dir():
-            logging.warning('{} is a directory'.format(link))
-            continue
         link.unlink()
 
     if lib in cache['linked']:
