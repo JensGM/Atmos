@@ -1,6 +1,7 @@
 from atmos import LinkError
 from atmos import get_dirs
 import logging
+import os
 
 
 def cmd_link(args, cache):
@@ -14,18 +15,28 @@ def cmd_link(args, cache):
     if not lib_path.is_dir():
         raise LinkError(f'{lib} is not a directory')
 
-    files = [p.absolute() for p in lib_path.rglob('*') if p.is_file()]
+    sources = [
+        p.absolute() for p in lib_path.rglob('*')
+        if p.is_symlink() or p.is_file()
+    ]
 
     links = []
-    for source in files:
+    for source in sources:
         target = dest_root / source.relative_to(lib_path)
 
-        if target.exists():
+        if target.is_symlink() or target.exists():
             logging.warning(f'{target} already exists')
             continue
 
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.symlink_to(source)
+        if source.is_symlink():
+            if not source.exists():
+                logging.warning(f'{source} does not resolve')
+            # os.readlink, not Path.readlink, to transport the link content
+            # byte-for-byte without Path normalization
+            target.symlink_to(os.readlink(source))
+        else:
+            target.symlink_to(source)
         record = str(source), str(target)
         links.append(record)
 

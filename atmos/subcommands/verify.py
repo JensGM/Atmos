@@ -3,6 +3,15 @@ from atmos import symlinks_to_lib
 from atmos import unlinked as unlinked_libs
 from itertools import chain
 from pathlib import Path
+import os
+
+
+def is_mismatch(src, link):
+    if not link.is_symlink():
+        return False
+    if src.is_symlink():
+        return os.readlink(link) != os.readlink(src)
+    return src.resolve() != link.resolve()
 
 
 def verify_linked(cache):
@@ -17,10 +26,10 @@ def verify_linked(cache):
     }
 
     for lib, links in linked.items():
-        missing_srcs = {s for s, _ in links if not s.exists()}
-        missing_links = {l for _, l in links if not l.exists()}
+        missing_srcs = {s for s, _ in links if not s.is_symlink() and not s.exists()}
+        missing_links = {l for _, l in links if not l.is_symlink() and not l.exists()}
         not_links = {l for _, l in links if not l.is_symlink()}
-        mismatches = {(s, l) for s, l in links if s.resolve() != l.resolve()}
+        mismatches = {(s, l) for s, l in links if is_mismatch(s, l)}
 
         if len(missing_srcs) > 0:
             issues.setdefault(lib, {})['missing_srcs'] = missing_srcs

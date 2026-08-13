@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 
 class CacheError(Exception): pass
@@ -44,20 +45,23 @@ def unlinked(cache):
     return existing(atmos_root) - linked(cache)
 
 
-def is_symlink_to_file_in_dir(candidate, root):
+def is_symlink_into_dir(candidate, root):
     if not candidate.is_symlink():
         return False
 
-    resolved = candidate.resolve()
-
-    try:
-        # If the candidate path does not start with the value of root, a
-        # ValueError is raised
-        resolved.relative_to(root)
-    except ValueError:
+    content = Path(os.readlink(candidate))
+    if not content.is_absolute():
         return False
 
-    return True
+    return Path(os.path.normpath(content)).is_relative_to(root)
+
+
+def is_transported_link(candidate, dest_root, lib_path):
+    if not candidate.is_symlink():
+        return False
+
+    mirror = lib_path / candidate.relative_to(dest_root)
+    return mirror.is_symlink() and os.readlink(mirror) == os.readlink(candidate)
 
 
 found_links = None
@@ -68,10 +72,12 @@ def symlinks_to_atmos_root(cache):
         return found_links
 
     atmos_root, dest_root = get_dirs(cache)
+    lib_paths = [atmos_root / lib for lib in existing(atmos_root)]
 
     found_links = frozenset(
         p for p in dest_root.rglob('*')
-        if is_symlink_to_file_in_dir(p, atmos_root)
+        if is_symlink_into_dir(p, atmos_root)
+        or any(is_transported_link(p, dest_root, lp) for lp in lib_paths)
     )
 
     return found_links
@@ -79,7 +85,7 @@ def symlinks_to_atmos_root(cache):
 
 def symlinks_to_lib(lib, cache):
     atmos_links = symlinks_to_atmos_root(cache)
-    atmos_root, _ = get_dirs(cache)
+    atmos_root, dest_root = get_dirs(cache)
 
     lib_path = atmos_root / lib
 
@@ -88,7 +94,8 @@ def symlinks_to_lib(lib, cache):
 
     links = {
         p for p in atmos_links
-        if is_symlink_to_file_in_dir(p, lib_path)
+        if is_symlink_into_dir(p, lib_path)
+        or is_transported_link(p, dest_root, lib_path)
     }
 
     return links

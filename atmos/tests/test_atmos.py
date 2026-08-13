@@ -1,9 +1,32 @@
 from .. import cli
+from atmos import core
 from atmos import get_dirs
 from atmos import UnlinkError
+from atmos.subcommands.verify import verify_all_links
+from atmos.subcommands.verify import verify_linked
 from diskcache import Cache
 from pathlib import Path
+import os
 import pytest  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def reset_found_links():
+    # symlinks_to_atmos_root memoizes its dest scan in a module global, which
+    # would leak stale results between tests
+    core.found_links = None
+
+
+def mktree(root, entries):
+    for name, value in entries.items():
+        path = Path(root, name)
+        if isinstance(value, dict):
+            path.mkdir()
+            mktree(path, value)
+        elif isinstance(value, Path):
+            path.symlink_to(value)
+        else:
+            path.write_text(value)
 
 
 @pytest.fixture()
@@ -114,3 +137,208 @@ def test_unlink_full(atmos_tmp):
     # some_library was not present in the cache.
     assert not file_a.exists()
     assert file_b.is_symlink()
+
+
+def test_link_transports_relative_symlink(tmp_path):
+    mktree(tmp_path, {
+        'atmos': {
+            'symlib': {
+                'regular.txt': 'real',
+                'sub': {
+                    'link_inside.txt': Path('../regular.txt'),
+                },
+            },
+        },
+        'dest': {},
+    })
+
+    args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        args.func(args, cache)
+
+    link = tmp_path / 'dest/sub/link_inside.txt'
+    assert link.is_symlink()
+    assert os.readlink(link) == '../regular.txt'
+    assert link.read_text() == 'real'
+
+
+def test_link_transports_absolute_symlink(tmp_path):
+    mktree(tmp_path, {
+        'outside': {'outer.txt': 'outer'},
+        'atmos': {
+            'symlib': {
+                'link_outside.txt': tmp_path / 'outside/outer.txt',
+            },
+        },
+        'dest': {},
+    })
+
+    args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        args.func(args, cache)
+
+    link = tmp_path / 'dest/link_outside.txt'
+    assert link.is_symlink()
+    assert os.readlink(link) == str(tmp_path / 'outside/outer.txt')
+    assert link.read_text() == 'outer'
+
+
+def test_link_transports_broken_symlink(tmp_path):
+    mktree(tmp_path, {
+        'atmos': {
+            'symlib': {
+                'broken.txt': Path('nonexistent'),
+            },
+        },
+        'dest': {},
+    })
+
+    args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        args.func(args, cache)
+
+    link = tmp_path / 'dest/broken.txt'
+    assert link.is_symlink()
+    assert not link.exists()
+    assert os.readlink(link) == 'nonexistent'
+
+
+def test_link_transports_directory_symlink(tmp_path):
+    mktree(tmp_path, {
+        'atmos': {
+            'symlib': {
+                'sub': {
+                    'inner.txt': 'inner',
+                },
+                'dirlink': Path('sub'),
+            },
+        },
+        'dest': {},
+    })
+
+    args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        args.func(args, cache)
+        records = cache['linked']['symlib']
+
+    dirlink = tmp_path / 'dest/dirlink'
+    assert dirlink.is_symlink()
+    assert os.readlink(dirlink) == 'sub'
+    assert (dirlink / 'inner.txt').read_text() == 'inner'
+
+    # inner.txt is linked through its real path only, not duplicated through
+    # the directory symlink
+    assert (tmp_path / 'dest/sub/inner.txt').is_symlink()
+    assert len(records) == 2
+
+
+def test_unlink_symlinks(tmp_path):
+    mktree(tmp_path, {
+        'outside': {'outer.txt': 'outer'},
+        'atmos': {
+            'symlib': {
+                'regular.txt': 'real',
+                'dirlink': Path('sub'),
+                'sub': {
+                    'link_inside.txt': Path('../regular.txt'),
+                    'link_outside.txt': tmp_path / 'outside/outer.txt',
+                    'broken.txt': Path('nonexistent'),
+                },
+            },
+        },
+        'dest': {},
+    })
+
+    link_args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        link_args.func(link_args, cache)
+
+    unlink_args = cli.parser.parse_args(['unlink', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        unlink_args.func(unlink_args, cache)
+        assert 'symlib' not in cache['linked']
+
+    leftovers = [p for p in (tmp_path / 'dest').rglob('*') if p.is_symlink()]
+    assert leftovers == []
+
+
+def test_unlink_full_symlinks(tmp_path):
+    mktree(tmp_path, {
+        'outside': {'outer.txt': 'outer'},
+        'atmos': {
+            'symlib': {
+                'regular.txt': 'real',
+                'dirlink': Path('sub'),
+                'sub': {
+                    'link_inside.txt': Path('../regular.txt'),
+                    'link_outside.txt': tmp_path / 'outside/outer.txt',
+                    'broken.txt': Path('nonexistent'),
+                },
+            },
+        },
+        'dest': {},
+    })
+
+    link_args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        link_args.func(link_args, cache)
+
+    # Delete the entry from the cache, making the cache invalid
+    with Cache(str(tmp_path / 'cache')) as cache:
+        linked = cache['linked']
+        del linked['symlib']
+        cache['linked'] = linked
+
+    unlink_args = cli.parser.parse_args(['unlink', 'symlib', '--full'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        unlink_args.func(unlink_args, cache)
+
+    leftovers = [p for p in (tmp_path / 'dest').rglob('*') if p.is_symlink()]
+    assert leftovers == []
+
+
+def test_verify_clean_after_link(tmp_path):
+    mktree(tmp_path, {
+        'outside': {'outer.txt': 'outer'},
+        'atmos': {
+            'symlib': {
+                'regular.txt': 'real',
+                'dirlink': Path('sub'),
+                'sub': {
+                    'link_inside.txt': Path('../regular.txt'),
+                    'link_outside.txt': tmp_path / 'outside/outer.txt',
+                    'broken.txt': Path('nonexistent'),
+                },
+            },
+        },
+        'dest': {},
+    })
+
+    link_args = cli.parser.parse_args(['link', 'symlib'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        link_args.func(link_args, cache)
+
+    with Cache(str(tmp_path / 'cache')) as cache:
+        assert verify_linked(cache) == {}
+        assert verify_all_links(cache) == {}

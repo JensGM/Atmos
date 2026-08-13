@@ -27,3 +27,16 @@ To undo the symlinks, you can run the following
 ```bash
 sudo atmos unlink some_library
 ```
+
+## Symlinks in libraries ##
+
+Files are linked to the destination as absolute symlinks. Symlinks are
+transported as-is, so relative targets resolve in the destination:
+
+```
+~/atmos/mylib/lib/libfoo.so -> libfoo.so.1
+/usr/local/lib/libfoo.so    -> libfoo.so.1
+```
+
+Unlink libraries before deleting them from the atmos root, or `unlink --full`
+will not be able to attribute their transported links.
