@@ -1,0 +1,56 @@
+[build-system]
+requires = [
+    "setuptools >= 64",
+    "setuptools_scm >= 8",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atmos"
+description = "atmos: package generated with cookiecutter-equinor"
+readme = "README.md"
+authors = [
+    { name = "Equinor", email = "jegm@equinor.com" },
+]
+license = { file = "LICENSE" }
+requires-python = ">= 3.8"
+keywords = []
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "diskcache",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/jensgm/atmos"
+Documentation = "https://atmos.readthedocs.io/"
+"Issue Tracker" = "https://github.com/jensgm/atmos/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "sphinx",
+]
+
+[project.scripts]
+atmos = "atmos.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["atmos*"]
+
+[tool.setuptools_scm]
+write_to = "atmos/version.py"
+
+[tool.pytest.ini_options]
+norecursedirs = [
+    ".git",
+    ".tox",
+    ".env",
+    "dist",
+    "build",
+]
+addopts = "-ra --strict-markers --ignore=docs/conf.py"
