@@ -9,6 +9,7 @@ except PackageNotFoundError:
 from .core import existing
 from .core import get_dirs
 from .core import linked
+from .core import namespace_view
 from .core import symlinks_to_atmos_root
 from .core import symlinks_to_lib
 from .core import unlinked
@@ -28,6 +29,7 @@ __all__ = [
     'existing',
     'get_dirs',
     'linked',
+    'namespace_view',
     'symlinks_to_atmos_root',
     'symlinks_to_lib',
     'unlinked',

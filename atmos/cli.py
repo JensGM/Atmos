@@ -19,20 +19,33 @@ import argparse
 import sys
 
 
+from atmos import namespace_view
 from atmos.subcommands import cmd_set
 from atmos.subcommands import cmd_list
 from atmos.subcommands import cmd_link
+from atmos.subcommands import cmd_new
 from atmos.subcommands import cmd_unlink
 from atmos.subcommands import cmd_verify
 
+
+common = argparse.ArgumentParser(add_help=False)
+common.add_argument('-t', dest='namespace', help='namespace')
 
 parser = argparse.ArgumentParser(description=None)
 subparsers = parser.add_subparsers()
 
 #
+# New command
+#
+parser_new = subparsers.add_parser('new')
+parser_new.add_argument('-t', dest='namespace', required=True, help='namespace')
+parser_new.set_defaults(func=cmd_new)
+
+
+#
 # Set command
 #
-parser_set = subparsers.add_parser('set')
+parser_set = subparsers.add_parser('set', parents=[common])
 parser_set.add_argument('param',
                         choices=['atmos_root', 'dest_root'])
 parser_set.add_argument('value')
@@ -42,7 +55,7 @@ parser_set.set_defaults(func=cmd_set)
 #
 # List command
 #
-parser_list = subparsers.add_parser('list')
+parser_list = subparsers.add_parser('list', parents=[common])
 parser_list.add_argument('selection',
                          default='linked',
                          const='linked',
@@ -54,7 +67,7 @@ parser_list.set_defaults(func=cmd_list)
 #
 # Link command
 #
-parser_link = subparsers.add_parser('link')
+parser_link = subparsers.add_parser('link', parents=[common])
 parser_link.add_argument('library', help='library name')
 parser_link.set_defaults(func=cmd_link)
 
@@ -62,7 +75,7 @@ parser_link.set_defaults(func=cmd_link)
 #
 # Unlink command
 #
-parser_unlink = subparsers.add_parser('unlink')
+parser_unlink = subparsers.add_parser('unlink', parents=[common])
 parser_unlink.add_argument('library', help='library name')
 parser_unlink.add_argument(
     '--full',
@@ -79,7 +92,7 @@ parser_unlink.set_defaults(func=cmd_unlink)
 #
 # Verify command
 #
-parser_verify = subparsers.add_parser('verify')
+parser_verify = subparsers.add_parser('verify', parents=[common])
 parser_verify.add_argument('--verbose', action='store_true')
 parser_verify.set_defaults(func=cmd_verify)
 
@@ -92,4 +105,7 @@ def main(args=None):
         sys.exit(1)
 
     with Cache('~/.atmos.cache') as cache:
-        args.func(args, cache)
+        if args.func is cmd_new:
+            args.func(args, cache)
+        else:
+            args.func(args, namespace_view(cache, args.namespace))

@@ -1,6 +1,8 @@
 from .. import cli
+from atmos import ConfigError
 from atmos import core
 from atmos import get_dirs
+from atmos import namespace_view
 from atmos import UnlinkError
 from atmos.subcommands.verify import verify_all_links
 from atmos.subcommands.verify import verify_linked
@@ -342,3 +344,86 @@ def test_verify_clean_after_link(tmp_path):
     with Cache(str(tmp_path / 'cache')) as cache:
         assert verify_linked(cache) == {}
         assert verify_all_links(cache) == {}
+
+
+def test_set_namespaced(tmp_path):
+    new_args = cli.parser.parse_args(['new', '-t', 'work'])
+    set_args = cli.parser.parse_args(['set', '-t', 'work', 'atmos_root', 'foo'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        new_args.func(new_args, cache)
+        set_args.func(set_args, namespace_view(cache, set_args.namespace))
+        assert cache['work:atmos_root'] == 'foo'
+        assert 'atmos_root' not in cache
+
+
+def test_link_namespaced(tmp_path):
+    mktree(tmp_path, {
+        'atmos': {
+            'mylib': {'file.txt': 'hello'},
+        },
+        'dest': {},
+    })
+
+    new_args = cli.parser.parse_args(['new', '-t', 'work'])
+    root_args = cli.parser.parse_args(
+        ['set', '-t', 'work', 'atmos_root', str(tmp_path / 'atmos')])
+    dest_args = cli.parser.parse_args(
+        ['set', '-t', 'work', 'dest_root', str(tmp_path / 'dest')])
+    link_args = cli.parser.parse_args(['link', '-t', 'work', 'mylib'])
+
+    with Cache(str(tmp_path / 'cache')) as cache:
+        new_args.func(new_args, cache)
+        root_args.func(root_args, namespace_view(cache, 'work'))
+        dest_args.func(dest_args, namespace_view(cache, 'work'))
+        link_args.func(link_args, namespace_view(cache, 'work'))
+        assert 'mylib' in cache['work:linked']
+        assert 'linked' not in cache
+    assert (tmp_path / 'dest/file.txt').is_symlink()
+
+
+def test_fail_on_unknown_namespace(tmp_path):
+    new_args = cli.parser.parse_args(['new', '-t', 'work'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        new_args.func(new_args, cache)
+        namespace_view(cache, 'work')
+        namespace_view(cache, None)
+        with pytest.raises(ConfigError):
+            namespace_view(cache, 'typo')
+
+
+def test_fail_on_duplicate_namespace(tmp_path):
+    new_args = cli.parser.parse_args(['new', '-t', 'work'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        new_args.func(new_args, cache)
+        with pytest.raises(ConfigError):
+            new_args.func(new_args, cache)
+
+
+def test_fail_on_invalid_namespace_name(tmp_path):
+    with Cache(str(tmp_path / 'cache')) as cache:
+        for name in ['with:colon', 'default']:
+            args = cli.parser.parse_args(['new', '-t', name])
+            with pytest.raises(ConfigError):
+                args.func(args, cache)
+
+
+def test_fail_on_missing_namespace_name():
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['new'])
+
+
+def test_legacy_cache_is_default_namespace(tmp_path):
+    mktree(tmp_path, {
+        'atmos': {'mylib': {'file.txt': 'hello'}},
+        'dest': {},
+    })
+
+    link_args = cli.parser.parse_args(['link', 'mylib'])
+    assert link_args.namespace is None
+    with Cache(str(tmp_path / 'cache')) as cache:
+        cache['atmos_root'] = str(tmp_path / 'atmos')
+        cache['dest_root'] = str(tmp_path / 'dest')
+        cache['linked'] = {}
+        link_args.func(link_args, namespace_view(cache, None))
+        assert 'mylib' in cache['linked']
+    assert (tmp_path / 'dest/file.txt').is_symlink()

@@ -8,6 +8,43 @@ class LinkError(Exception): pass
 class UnlinkError(Exception): pass
 
 
+class NamespaceView:
+    def __init__(self, cache, namespace):
+        self.cache = cache
+        self.namespace = namespace
+
+    def key(self, name):
+        if self.namespace is None:
+            return name
+        return f'{self.namespace}:{name}'
+
+    def __contains__(self, name):
+        return self.key(name) in self.cache
+
+    def __getitem__(self, name):
+        return self.cache[self.key(name)]
+
+    def __setitem__(self, name, value):
+        self.cache[self.key(name)] = value
+
+    def __eq__(self, other):
+        if not isinstance(other, NamespaceView):
+            return False
+        return (self.cache, self.namespace) == (other.cache, other.namespace)
+
+    def __hash__(self):
+        return hash((self.cache, self.namespace))
+
+    def __repr__(self):
+        return f'NamespaceView({self.cache!r}, {self.namespace!r})'
+
+
+def namespace_view(cache, namespace):
+    if namespace is not None and namespace not in cache.get('namespaces', ()):
+        raise ConfigError(f'namespace {namespace} does not exist')
+    return NamespaceView(cache, namespace)
+
+
 def validate_cache(cache):
     if 'atmos_root' not in cache:
         raise CacheError('atmos_root not found in ~/.atmos.cache')
