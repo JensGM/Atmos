@@ -412,6 +412,17 @@ def test_fail_on_missing_namespace_name():
         cli.parser.parse_args(['new'])
 
 
+def test_lsns(tmp_path, capsys):
+    new_work = cli.parser.parse_args(['new', '-t', 'work'])
+    new_play = cli.parser.parse_args(['new', '-t', 'play'])
+    list_args = cli.parser.parse_args(['lsns'])
+    with Cache(str(tmp_path / 'cache')) as cache:
+        new_work.func(new_work, cache)
+        new_play.func(new_play, cache)
+        list_args.func(list_args, cache)
+    assert capsys.readouterr().out == 'play\nwork\n'
+
+
 def test_legacy_cache_is_default_namespace(tmp_path):
     mktree(tmp_path, {
         'atmos': {'mylib': {'file.txt': 'hello'}},

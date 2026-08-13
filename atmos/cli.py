@@ -23,6 +23,7 @@ from atmos import namespace_view
 from atmos.subcommands import cmd_set
 from atmos.subcommands import cmd_list
 from atmos.subcommands import cmd_link
+from atmos.subcommands import cmd_lsns
 from atmos.subcommands import cmd_new
 from atmos.subcommands import cmd_unlink
 from atmos.subcommands import cmd_verify
@@ -40,6 +41,13 @@ subparsers = parser.add_subparsers()
 parser_new = subparsers.add_parser('new')
 parser_new.add_argument('-t', dest='namespace', required=True, help='namespace')
 parser_new.set_defaults(func=cmd_new)
+
+
+#
+# Lsns command
+#
+parser_lsns = subparsers.add_parser('lsns')
+parser_lsns.set_defaults(func=cmd_lsns)
 
 
 #
@@ -105,7 +113,7 @@ def main(args=None):
         sys.exit(1)
 
     with Cache('~/.atmos.cache') as cache:
-        if args.func is cmd_new:
+        if args.func in (cmd_new, cmd_lsns):
             args.func(args, cache)
         else:
             args.func(args, namespace_view(cache, args.namespace))
