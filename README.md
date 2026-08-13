@@ -1,5 +1,7 @@
 # atmos #
 
+[![CI](https://github.com/JensGM/Atmos/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/JensGM/Atmos/actions/workflows/ci.yml)
+
 Merge install prefixes though removable symlinks.
 
 ## Getting started ##
