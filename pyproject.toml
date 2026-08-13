@@ -10,7 +10,7 @@ authors = [
     { name = "Jens G Magnus", email = "atmosrepo.ensure573@passinbox.com" }
 ]
 license = { file = "LICENSE" }
-requires-python = ">= 3.8"
+requires-python = ">= 3.11"
 keywords = []
 dependencies = [
     "diskcache",

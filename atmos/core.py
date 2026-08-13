@@ -84,10 +84,10 @@ def symlinks_to_lib(lib, cache):
     lib_path = atmos_root / lib
 
     if not lib_path.is_dir():
-        raise ValueError('{} is not a directory'.format(lib))
+        raise ValueError(f'{lib} is not a directory')
 
     links = {
-        p for p in symlinks_to_atmos_root(cache)
+        p for p in atmos_links
         if is_symlink_to_file_in_dir(p, lib_path)
     }
 

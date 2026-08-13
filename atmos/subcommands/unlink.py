@@ -12,7 +12,7 @@ def cmd_unlink(args, cache):
     full = args.full
 
     if lib not in cache['linked'] and not full:
-        raise UnlinkError('library {} not linked'.format(lib))
+        raise UnlinkError(f'library {lib} not linked')
 
     links = frozenset()
 
@@ -25,7 +25,7 @@ def cmd_unlink(args, cache):
     for link in links:
         link = Path(link)
         if not link.is_symlink():
-            logging.warning('{} is not a symlink'.format(link))
+            logging.warning(f'{link} is not a symlink')
             continue
         link.unlink()
 

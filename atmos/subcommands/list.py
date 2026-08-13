@@ -15,9 +15,9 @@ def cmd_list(args, cache):
     elif args.selection == 'links':
         lns = cache['linked']
         for lib, links in lns.items():
-            print('{} links:'.format(lib))
+            print(f'{lib} links:')
             for src, dst in links:
-                print('\t{} installed to {}'.format(src, dst))
+                print(f'\t{src} installed to {dst}')
 
     else:
-        raise RuntimeError('Unknown selection {}'.format(args.selection))
+        raise RuntimeError(f'Unknown selection {args.selection}')

@@ -8,11 +8,11 @@ def cmd_link(args, cache):
 
     lib = args.library
     if lib in cache['linked']:
-        raise LinkError('library {} already linked'.format(lib))
+        raise LinkError(f'library {lib} already linked')
 
     lib_path = atmos_root / lib
     if not lib_path.is_dir():
-        raise LinkError('{} is not a directory'.format(lib))
+        raise LinkError(f'{lib} is not a directory')
 
     files = [p.absolute() for p in lib_path.rglob('*') if p.is_file()]
 
@@ -21,7 +21,7 @@ def cmd_link(args, cache):
         target = dest_root / source.relative_to(lib_path)
 
         if target.exists():
-            logging.warning('{} already exists'.format(target))
+            logging.warning(f'{target} already exists')
             continue
 
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -80,13 +80,13 @@ def cmd_verify(args, cache):
     linked_issues = verify_linked(cache)
     if len(linked_issues) > 0:
         for lib, issues in linked_issues.items():
-            print('Found issues in linked library {}:'.format(lib))
+            print(f'Found issues in linked library {lib}:')
             print(issues)
 
     unlinked_issues = verify_unlinked(cache)
     if len(unlinked_issues) > 0:
-        for lib, issues in unlinked.items():
-            print('Found issues in unlinked library {}:'.format(lib))
+        for lib, issues in unlinked_issues.items():
+            print(f'Found issues in unlinked library {lib}:')
             print(issues)
 
     link_issues = verify_all_links(cache)
