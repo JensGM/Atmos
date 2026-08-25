@@ -3,9 +3,11 @@ from atmos import ConfigError
 from atmos import core
 from atmos import get_dirs
 from atmos import namespace_view
+from atmos import unlinked
 from atmos import UnlinkError
 from atmos.subcommands.verify import verify_all_links
 from atmos.subcommands.verify import verify_linked
+from atmos.subcommands.verify import verify_unlinked
 from diskcache import Cache
 from pathlib import Path
 import os
@@ -82,6 +84,46 @@ def test_link(atmos_tmp):
     assert msg == 'hello'
 
 
+def test_unlinked(atmos_tmp):
+    args = cli.parser.parse_args(['link', 'some_library'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        assert unlinked(cache) == {'some_library', 'another_library'}
+        args.func(args, cache)
+        assert unlinked(cache) == {'another_library'}
+
+
+def test_list_linked(atmos_tmp, capsys):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    list_args = cli.parser.parse_args(['list'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+        list_args.func(list_args, cache)
+    assert capsys.readouterr().out == 'some_library\n'
+
+
+def test_list_unlinked(atmos_tmp, capsys):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    list_args = cli.parser.parse_args(['list', 'unlinked'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+        list_args.func(list_args, cache)
+    assert capsys.readouterr().out == 'another_library\n'
+
+
+def test_list_links(atmos_tmp, capsys):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    list_args = cli.parser.parse_args(['list', 'links'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+        list_args.func(list_args, cache)
+
+    ar = Path('atmos/tests/test_data/atmos_root').resolve()
+    src = ar / 'some_library/somedir/msg.txt'
+    dst = Path(atmos_tmp['dest_root']) / 'somedir/msg.txt'
+    out = capsys.readouterr().out
+    assert out == f'some_library links:\n\t{src} installed to {dst}\n'
+
+
 def test_unlink(atmos_tmp):
     some_library_args = cli.parser.parse_args(['link', 'some_library'])
     another_library_args = cli.parser.parse_args(['link', 'another_library'])
@@ -100,6 +142,23 @@ def test_unlink(atmos_tmp):
 
     assert not file_a.exists()
     assert file_b.is_symlink()
+
+
+def test_unlink_full_keeps_escaping_links(atmos_tmp):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+        atmos_root, dest_root = get_dirs(cache)
+
+        # Starts inside the library, but climbs back out of it
+        escaping = Path(dest_root) / 'escaping.txt'
+        escaping.symlink_to(
+            atmos_root / 'some_library/../another_library/lib/hello_world.py')
+
+        unlink_args = cli.parser.parse_args(['unlink', 'some_library', '--full'])
+        unlink_args.func(unlink_args, cache)
+
+    assert escaping.is_symlink()
 
 
 def test_unlink_full(atmos_tmp):
@@ -346,6 +405,51 @@ def test_verify_clean_after_link(tmp_path):
         assert verify_all_links(cache) == {}
 
 
+def test_verify_prints_a_dict_when_clean(atmos_tmp, capsys):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    verify_args = cli.parser.parse_args(['verify'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+        verify_args.func(verify_args, cache)
+    assert capsys.readouterr().out == '{}\n'
+
+
+def test_verify_reports_links_to_unlinked(atmos_tmp, capsys):
+    link_args = cli.parser.parse_args(['link', 'some_library'])
+    verify_args = cli.parser.parse_args(['verify'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        link_args.func(link_args, cache)
+
+        linked_libs = cache['linked']
+        del linked_libs['some_library']
+        cache['linked'] = linked_libs
+
+        verify_args.func(verify_args, cache)
+
+    out = capsys.readouterr().out
+    assert 'Found issues in unlinked library some_library:' in out
+    assert 'links_to_unlinked' in out
+    assert 'invalid_links' in out
+
+
+def test_verify_unlinked(atmos_tmp):
+    args = cli.parser.parse_args(['link', 'some_library'])
+    with Cache(atmos_tmp['cache_path']) as cache:
+        args.func(args, cache)
+        assert verify_unlinked(cache) == {}
+
+        # Drop the record, leaving links to a library that is now unlinked
+        linked_libs = cache['linked']
+        del linked_libs['some_library']
+        cache['linked'] = linked_libs
+
+        issues = verify_unlinked(cache)
+
+    assert list(issues) == ['some_library']
+    links = issues['some_library']['links_to_unlinked']
+    assert links == {Path(atmos_tmp['dest_root']) / 'somedir/msg.txt'}
+
+
 def test_set_namespaced(tmp_path):
     new_args = cli.parser.parse_args(['new', '-t', 'work'])
     set_args = cli.parser.parse_args(['set', '-t', 'work', 'atmos_root', 'foo'])
@@ -410,6 +514,37 @@ def test_fail_on_invalid_namespace_name(tmp_path):
 def test_fail_on_missing_namespace_name():
     with pytest.raises(SystemExit):
         cli.parser.parse_args(['new'])
+
+
+def test_fail_on_unknown_param():
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['set', 'foo', 'bar'])
+
+
+def test_fail_on_unknown_selection():
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['list', 'bogus'])
+
+
+def test_fail_on_unknown_option():
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['link', '--bogus', 'some_library'])
+
+
+def test_subcommand_help(capsys):
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['unlink', '--help'])
+    out = capsys.readouterr().out
+    assert 'unlink' in out
+    assert '--full' in out
+
+
+def test_help_lists_the_commands(capsys):
+    with pytest.raises(SystemExit):
+        cli.parser.parse_args(['--help'])
+    out = capsys.readouterr().out
+    for command in ['new', 'lsns', 'set', 'list', 'link', 'unlink']:
+        assert command in out
 
 
 def test_lsns(tmp_path, capsys):
