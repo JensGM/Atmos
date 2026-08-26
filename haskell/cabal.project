@@ -1,0 +1,5 @@
+packages: . probes/
+
+-- direct-sqlite's upper bounds predate the compilers used here; the C source
+-- it ships is what the probe is about, not its version bounds.
+allow-newer: all

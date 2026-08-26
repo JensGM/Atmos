@@ -1,0 +1,65 @@
+cabal-version:      2.4
+name:               atmos-probes
+version:            0.1.0.0
+synopsis:           Runtime probes used for the atmos wasm evaluation
+description:
+  Small programs that answer one question each about what a wasm32-wasi build
+  can and cannot do.  Build them with a stock GHC and with wasm32-wasi-ghc and
+  compare the output; that difference is the evaluation.
+
+license:            LGPL-3.0-only
+build-type:         Simple
+
+flag sqlite
+  description: Build the probes that need direct-sqlite.
+  default:     False
+  manual:      True
+
+-- Filesystem capabilities: symlinks, atomic rename, fsync, O_EXCL.
+executable fs-probe
+  main-is:          FsProbe.hs
+  build-depends:
+    , base
+    , directory
+    , filepath
+    , unix
+
+  default-language: Haskell2010
+
+-- Follow-up: relative targets that escape a preopen, and absolute links made
+-- by the host that a wasm build has to inspect.
+executable fs-probe2
+  main-is:          FsProbe2.hs
+  build-depends:
+    , base
+    , directory
+    , filepath
+    , unix
+
+  default-language: Haskell2010
+
+-- What SQLite's WASI build actually does: VFS, WAL, locking, temp files.
+executable sqlite-probe
+  main-is:          SqliteProbe.hs
+  build-depends:
+    , base
+    , direct-sqlite
+    , text
+
+  default-language: Haskell2010
+
+  if !flag(sqlite)
+    buildable: False
+
+-- Several instances writing the same database at once.
+executable lock-race
+  main-is:          LockRace.hs
+  build-depends:
+    , base
+    , direct-sqlite
+    , text
+
+  default-language: Haskell2010
+
+  if !flag(sqlite)
+    buildable: False
