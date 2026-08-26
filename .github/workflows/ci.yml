@@ -11,24 +11,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        ghc-version: ["9.10"]
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: haskell-actions/setup@v2
+        id: setup
         with:
-          python-version: ${{ matrix.python-version }}
+          ghc-version: ${{ matrix.ghc-version }}
+          cabal-version: "3.12"
 
-      - name: Install
-        run: pip install .[dev]
+      - name: Configure
+        run: cabal configure --enable-tests
+
+      - name: Freeze
+        run: cabal freeze
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('cabal.project.freeze') }}
+          restore-keys: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Build
+        run: cabal build all
 
       - name: Run tests
-        run: pytest
+        run: cabal test all
 
       - name: Smoke test CLI
         run: |
-          atmos --help
-          python -c "import atmos; print(atmos.__version__)"
+          cabal run --verbose=0 atmos -- --version
+          cabal run --verbose=0 atmos -- --help

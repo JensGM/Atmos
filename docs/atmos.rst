@@ -1,4 +1,0 @@
-atmos
-=====
-
-.. automodule:: atmos
